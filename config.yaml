@@ -1,6 +1,11 @@
 paths:
   root_folder: "T:/Projekte"
 
+  # unterordner 
+  project_search_folders:
+      - ""
+      - "unterl_neue_proj"  #für luki
+
   email_folder: "korr"
   attachment_folder: "orig"
 

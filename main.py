@@ -4,6 +4,8 @@ import yaml
 import re
 from datetime import datetime
 import shutil
+import tkinter as tk
+from tkinter import ttk
 
 def read_email(msg_path):
     """
@@ -108,7 +110,7 @@ def read_email(msg_path):
 
     return email_data
 
-def scan_projects(root_folder):
+def scan_projects(root_folder, config):
     """
     Scan the project directory.
 
@@ -128,14 +130,15 @@ def scan_projects(root_folder):
             f"Root folder not found: {root_folder}"
         )
 
+   
+
     projects = []
 
     # Example:
     # 26_001_Project Name
     project_pattern = re.compile(
-        r"^(?P<year>\d{2})_(?P<number>\d{3})_(?P<name>.+)$"
+        r"^(?P<prefix>A?)(?P<year>\d{2})_(?P<number>\d{3})_(?P<name>.+)$"
     )
-
     # Scan root folder
     try:
         year_folders = list(root_folder.iterdir())
@@ -144,55 +147,70 @@ def scan_projects(root_folder):
         raise PermissionError(
             f"No permission to access root folder: {root_folder}"
         )
+  # Locations that contain YYYY folders
+    search_roots = [
+        root_folder / folder
+        for folder in config["paths"]["project_search_folders"]
+    ]
 
-    for year_folder in year_folders:
+    for search_root in search_roots:
 
-        # First check the name.
-        # This does not require entering the folder.
-        if not re.fullmatch(r"\d{4}", year_folder.name):
+        if not search_root.exists():
             continue
 
         try:
-            if not year_folder.is_dir():
-                continue
-
-            project_folders = list(year_folder.iterdir())
-
+            year_folders = list(search_root.iterdir())
         except PermissionError:
-            # Skip inaccessible year folders
             continue
+        for year_folder in year_folders:
 
-        for project_folder in project_folders:
-
-            # IMPORTANT:
-            # Check project name BEFORE trying to access the folder.
-            match = project_pattern.fullmatch(project_folder.name)
-
-            if not match:
+            # First check the name.
+            # This does not require entering the folder.
+            if not re.fullmatch(r"\d{4}", year_folder.name):
                 continue
 
             try:
-                if not project_folder.is_dir():
+                if not year_folder.is_dir():
                     continue
 
+                project_folders = list(year_folder.iterdir())
+
             except PermissionError:
-                # Valid-looking project, but user has no access
+                # Skip inaccessible year folders
                 continue
 
-            projects.append({
-                "year": year_folder.name,
+            for project_folder in project_folders:
 
-                "project_number": (
-                    f"{match.group('year')}_"
-                    f"{match.group('number')}"
-                ),
+                # IMPORTANT:
+                # Check project name BEFORE trying to access the folder.
+                match = project_pattern.fullmatch(project_folder.name)
 
-                "name": match.group("name"),
+                if not match:
+                    continue
 
-                "folder_name": project_folder.name,
+                try:
+                    if not project_folder.is_dir():
+                        continue
 
-                "path": project_folder,
-            })
+                except PermissionError:
+                    # Valid-looking project, but user has no access
+                    continue
+
+                projects.append({
+                    "year": year_folder.name,
+
+                    "project_number": (
+                        f"{match.group('prefix')}"
+                        f"{match.group('year')}_"
+                        f"{match.group('number')}"
+                    ),
+
+                    "name": match.group("name"),
+
+                    "folder_name": project_folder.name,
+
+                    "path": project_folder,
+                })
 
     # Sort by year and project number
     projects.sort(
@@ -681,7 +699,168 @@ def save_attachments(
         saved_files.append(destination)
 
     return saved_files
-    
+
+
+# ==========================================
+# GUI
+# ==========================================
+
+class EmailToolGUI:
+
+    def __init__(self, root, config, projects):
+
+        self.root = root
+        self.config = config
+        self.projects = projects
+
+        self.selected_project = None
+        self.current_results = projects
+
+        self.root.title("Email Tool")
+        self.root.geometry("800x600")
+
+        self.create_widgets()
+
+
+    def create_widgets(self):
+
+        title = ttk.Label(
+            self.root,
+            text="Email Tool",
+            font=("Segoe UI", 18, "bold")
+        )
+
+        title.pack(
+            pady=(20, 10)
+        )
+
+        # Project section
+        project_frame = ttk.LabelFrame(
+            self.root,
+            text="Projekt auswählen",
+            padding=10
+        )
+
+        project_frame.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=10
+        )
+
+        ttk.Label(
+            project_frame,
+            text="Projekt suchen:"
+        ).pack(
+            anchor="w"
+        )
+
+        self.search_var = tk.StringVar()
+
+        self.search_entry = ttk.Entry(
+            project_frame,
+            textvariable=self.search_var
+        )
+
+        self.search_entry.pack(
+            fill="x",
+            pady=(5, 10)
+        )
+
+        self.search_entry.bind(
+            "<KeyRelease>",
+            self.update_project_list
+        )
+
+        self.project_list = tk.Listbox(
+            project_frame,
+            height=15
+        )
+
+        self.project_list.pack(
+            fill="both",
+            expand=True
+        )
+
+        self.project_list.bind(
+            "<<ListboxSelect>>",
+            self.on_project_selected
+        )
+
+        self.selected_project_label = ttk.Label(
+            project_frame,
+            text="Kein Projekt ausgewählt."
+        )
+
+        self.selected_project_label.pack(
+            anchor="w",
+            pady=(10, 0)
+        )
+
+        # Show all projects initially
+        self.update_project_list()
+
+
+    def update_project_list(self, event=None):
+
+        search_term = self.search_var.get()
+
+        if search_term.strip():
+            results = search_projects(
+                self.projects,
+                search_term
+            )
+        else:
+            results = self.projects
+
+        self.current_results = results
+
+        self.project_list.delete(
+            0,
+            tk.END
+        )
+
+        for project in results:
+
+            display_text = (
+                f"{project['project_number']} | "
+                f"{project['name']}"
+            )
+
+            self.project_list.insert(
+                tk.END,
+                display_text
+            )
+
+
+    def on_project_selected(self, event=None):
+
+        selection = self.project_list.curselection()
+
+        if not selection:
+            return
+
+        index = selection[0]
+
+        self.selected_project = (
+            self.current_results[index]
+        )
+
+        self.selected_project_label.config(
+            text=(
+                f"Ausgewählt: "
+                f"{self.selected_project['project_number']} | "
+                f"{self.selected_project['name']}"
+            )
+        )
+
+
+# ==========================================
+# MAIN
+# ==========================================
+
+
+
 def main():
     """Main entry point of the application."""
 
@@ -736,8 +915,10 @@ def main():
     else:
         print("No inline attachments found.")
 
-    projects = scan_projects(root_folder)
-
+    projects = scan_projects(
+    root_folder,
+    config
+    )
     print(f"\n{len(projects)} projects found.")
 
     if not projects:
