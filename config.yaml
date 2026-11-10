@@ -1,0 +1,17 @@
+paths:
+  root_folder: "T:/Projekte"
+
+  email_folder: "korr"
+  attachment_folder: "orig"
+
+email:
+  file_format: "msg"
+  save_attachments: true
+
+naming:
+  prefix: "Em"
+  date_format: "%Y-%m-%d-%H-%M"
+  separator: "_"
+
+general:
+  overwrite_existing_files: false
