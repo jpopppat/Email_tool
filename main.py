@@ -8,6 +8,9 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import json
 from tkinterdnd2 import DND_FILES, TkinterDnD
+import pythoncom
+from outlook_drop import OutlookDropManager
+import tempfile
 
 def read_email(msg_path):
     """
@@ -770,6 +773,8 @@ class EmailToolGUI:
 
     def __init__(self, root, config, projects):
         self.root = root
+        self.outlook_drop_manager = None
+        self.loaded_email_path = None
         self.config = config
         self.projects = projects
 
@@ -808,6 +813,11 @@ class EmailToolGUI:
 
 
         self.create_widgets()
+        self.register_outlook_drop()
+        self.root.protocol(
+            "WM_DELETE_WINDOW",
+            self.on_close
+        )
 
     ''' alt eine spalte
         def create_widgets(self):
@@ -2049,6 +2059,8 @@ class EmailToolGUI:
 
             self.email = None
             return
+        
+        self.loaded_email_path = Path(msg_path) #???
 
         self.email_subject_label.config(
             text=f"Betreff: {self.email['subject']}"
@@ -2327,14 +2339,56 @@ class EmailToolGUI:
         # Focus ready for next email
         self.select_email_button.focus_set()
 
+        if self.loaded_email_path:
+
+            temp_email_folder = (
+                Path(tempfile.gettempdir())
+                / "EmailTool"
+            )
+
+            try:
+
+                if (
+                    self.loaded_email_path.exists()
+                    and self.loaded_email_path.parent
+                    == temp_email_folder
+                ):
+                    self.loaded_email_path.unlink()
+
+            except OSError as error:
+                print(
+                    f"Temporary MSG could not be deleted: {error}"
+                )
+
+        self.loaded_email_path = None
+
     def on_email_drop(self, event):
         """
-        Handle a dropped MSG file.
+        Debug Outlook drag and drop.
         """
 
-        dropped_files = self.root.tk.splitlist(
-            event.data
-        )
+        print("\n--- DROP DEBUG ---")
+        print("event.data:")
+        print(repr(event.data))
+
+        print("\nevent type:")
+        print(type(event.data))
+
+        print("------------------\n")
+
+        try:
+            dropped_files = self.root.tk.splitlist(
+                event.data
+            )
+
+            print("splitlist:")
+            print(dropped_files)
+
+        except Exception as error:
+            print("splitlist error:")
+            print(error)
+
+            return
 
         if not dropped_files:
             return
@@ -2343,17 +2397,75 @@ class EmailToolGUI:
             dropped_files[0]
         )
 
+        print("Path:")
+        print(msg_path)
+
         if msg_path.suffix.lower() != ".msg":
 
-            messagebox.showwarning(
-                "Ungültige Datei",
-                "Bitte eine Outlook-MSG-Datei verwenden."
+            print(
+                "Dropped object is not a normal MSG file."
             )
 
             return
 
         self.load_email(msg_path)
 
+    def on_outlook_drop(self, extracted_files):
+        """
+        Load MSG files extracted from an Outlook OLE drop.
+        """
+
+        if not extracted_files:
+            return
+
+        msg_path = Path(
+            extracted_files[0]
+        )
+
+        print(
+            f"Loading Outlook message: {msg_path}"
+        )
+
+        self.load_email(
+            msg_path
+        )
+
+    def register_outlook_drop(self):
+        """
+        Register the main window as an Outlook OLE drop target.
+        """
+
+        try:
+            self.outlook_drop_manager = OutlookDropManager(
+                tkinter_window=self.root,
+                drop_callback=self.on_outlook_drop
+            )
+
+            self.outlook_drop_manager.register()
+
+        except Exception as error:
+
+            self.outlook_drop_manager = None
+
+            print(
+                "Outlook drag and drop could not be registered:"
+            )
+            print(error)
+
+    def on_close(self):
+        """
+        Cleanly close the application.
+        """
+
+        if self.outlook_drop_manager is not None:
+            self.outlook_drop_manager.unregister()
+
+        try:
+            pythoncom.OleUninitialize()
+        except Exception:
+            pass
+
+        self.root.destroy()
 # ==========================================
 # MAIN
 # ==========================================
@@ -2362,16 +2474,14 @@ class EmailToolGUI:
 
 def main():
     """Main entry point of the application."""
-
+    pythoncom.OleInitialize()
     config = load_config()
 
     root_folder = Path(config["paths"]["root_folder"])
     msg_file = Path('C:/Users/jakobp/Desktop/test_mit_anhang.msg')
 
 
-    print("Email Tool started")
-    print(f"Root folder: {root_folder}")
-    print(f"Test email:  {msg_file}")
+    
 
     if not root_folder.exists():
         print("WARNING: Root folder does not exist.")
@@ -2383,16 +2493,9 @@ def main():
     
     email = read_email(msg_file)
 
-    print("\n--- EMAIL ---")
-    print(f"Subject: {email['subject']}")
-    print(f"Sender:  {email['sender']}")
-    print(f"To:      {email['to']}")
-    print(f"CC:      {email['cc']}")
-    print(f"Date:    {email['date']}")
+    
 
-
-    print("\n--- REAL ATTACHMENTS ---")
-
+  
     if email["attachments"]:
 
         for attachment in email["attachments"]:
@@ -2421,8 +2524,7 @@ def main():
     root_folder,
     config
     )
-    print(f"\n{len(projects)} projects found.")
-
+    
     if not projects:
         print("No projects available.")
         return
