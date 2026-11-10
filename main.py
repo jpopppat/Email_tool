@@ -5,7 +5,8 @@ import re
 from datetime import datetime
 import shutil
 import tkinter as tk
-from tkinter import ttk
+
+from tkinter import ttk, filedialog, messagebox
 
 def read_email(msg_path):
     """
@@ -293,69 +294,6 @@ def sanitize_filename(name):
 
     return name
 
-def select_name1_folder(project_path, config):
-    """
-    Let the user select an existing name1 folder or create a new one.
-    """
-
-    attachment_root = (
-        Path(project_path)
-        / config["paths"]["attachment_folder"]
-    )
-
-    attachment_root.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    existing_folders = sorted(
-        [
-            folder
-            for folder in attachment_root.iterdir()
-            if folder.is_dir()
-        ],
-        key=lambda folder: folder.name.lower()
-    )
-
-    print("\n--- ORGANISATION / FIRMA / GEMEINDE ---")
-
-    if existing_folders:
-
-        for index, folder in enumerate(
-            existing_folders,
-            start=1
-        ):
-            print(f"{index}: {folder.name}")
-
-    else:
-        print("Noch keine vorhandenen Ordner.")
-
-    print("\nN: Neuen Ordner anlegen")
-
-    selection = input(
-        "\nNummer oder neuer Name: "
-    ).strip()
-
-    if selection.isdigit():
-
-        index = int(selection) - 1
-
-        if 0 <= index < len(existing_folders):
-            return existing_folders[index]
-
-        print("Ungültige Auswahl.")
-
-    name1 = sanitize_filename(selection)
-
-    name1_folder = attachment_root / name1
-
-    name1_folder.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    return name1_folder
-
 def create_attachment_destination(
     name1_folder,
     name2,
@@ -397,149 +335,6 @@ def create_attachment_destination(
 
     return destination
 
-def select_attachments(attachments):
-    """
-    Let the user choose which attachments should be saved.
-
-    Input examples:
-        A
-        1
-        1,3,4
-        N
-    """
-
-    if not attachments:
-        print("\nKeine echten Anhänge vorhanden.")
-        return []
-
-    print("\n--- ANHÄNGE ---")
-
-    for index, attachment in enumerate(
-        attachments,
-        start=1
-    ):
-        print(
-            f"{index}: "
-            f"{attachment['filename']}"
-        )
-
-    print("\nA: Alle Anhänge")
-    print("N: Keine Anhänge")
-    print("Oder Nummern eingeben, z. B. 1,3,4")
-
-    selection = input(
-        "\nWelche Anhänge sollen gespeichert werden? "
-    ).strip().lower()
-
-    if selection == "a":
-        return attachments
-
-    if selection in {"n", ""}:
-        return []
-
-    selected_attachments = []
-
-    for value in selection.split(","):
-
-        value = value.strip()
-
-        if not value.isdigit():
-            print(
-                f"Ungültige Auswahl wird ignoriert: {value}"
-            )
-            continue
-
-        index = int(value) - 1
-
-        if 0 <= index < len(attachments):
-
-            attachment = attachments[index]
-
-            if attachment not in selected_attachments:
-                selected_attachments.append(
-                    attachment
-                )
-
-        else:
-            print(
-                f"Anhangnummer außerhalb des Bereichs: "
-                f"{value}"
-            )
-
-    return selected_attachments
-
-def select_project(projects):
-    """
-    Search for a project and let the user select one.
-
-    Returns:
-        dict: Selected project
-        None: User cancelled the selection
-    """
-
-    while True:
-
-        search_term = input(
-            "\nSearch project (Enter to cancel): "
-        ).strip()
-
-        if not search_term:
-            return None
-
-        results = search_projects(
-            projects,
-            search_term
-        )
-
-        if not results:
-            print("No projects found.")
-            continue
-
-        print(f"\n{len(results)} project(s) found:")
-
-        for index, project in enumerate(results, start=1):
-            print(
-                f"{index}: "
-                f"{project['project_number']} | "
-                f"{project['name']}"
-            )
-
-        # Exactly one result
-        if len(results) == 1:
-
-            selection = input(
-                "\nPress Enter to select this project "
-                "or 'B' to go back: "
-            ).strip().lower()
-
-            if selection == "b":
-                continue
-
-            return results[0]
-
-        # Multiple results
-        selection = input(
-            "\nSelect project number "
-            "(B = back, Q = cancel): "
-        ).strip().lower()
-
-        if selection == "q":
-            return None
-
-        if selection == "b":
-            continue
-
-        if not selection.isdigit():
-            print("Invalid selection.")
-            continue
-
-        index = int(selection) - 1
-
-        if not 0 <= index < len(results):
-            print("Invalid selection.")
-            continue
-
-        return results[index]
 
 def get_unique_path(file_path):
     """
@@ -701,6 +496,219 @@ def save_attachments(
     return saved_files
 
 
+''' alte Funktionen für terminalauswahl, werden jetzt durch GUI ersetzt
+
+def select_name1_folder(project_path, config):
+    """
+    Let the user select an existing name1 folder or create a new one.
+    """
+
+    attachment_root = (
+        Path(project_path)
+        / config["paths"]["attachment_folder"]
+    )
+
+    attachment_root.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    existing_folders = sorted(
+        [
+            folder
+            for folder in attachment_root.iterdir()
+            if folder.is_dir()
+        ],
+        key=lambda folder: folder.name.lower()
+    )
+
+    print("\n--- ORGANISATION / FIRMA / GEMEINDE ---")
+
+    if existing_folders:
+
+        for index, folder in enumerate(
+            existing_folders,
+            start=1
+        ):
+            print(f"{index}: {folder.name}")
+
+    else:
+        print("Noch keine vorhandenen Ordner.")
+
+    print("\nN: Neuen Ordner anlegen")
+
+    selection = input(
+        "\nNummer oder neuer Name: "
+    ).strip()
+
+    if selection.isdigit():
+
+        index = int(selection) - 1
+
+        if 0 <= index < len(existing_folders):
+            return existing_folders[index]
+
+        print("Ungültige Auswahl.")
+
+    name1 = sanitize_filename(selection)
+
+    name1_folder = attachment_root / name1
+
+    name1_folder.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    return name1_folder
+
+    
+def select_attachments(attachments):
+    """
+    Let the user choose which attachments should be saved.
+
+    Input examples:
+        A
+        1
+        1,3,4
+        N
+    """
+
+    if not attachments:
+        print("\nKeine echten Anhänge vorhanden.")
+        return []
+
+    print("\n--- ANHÄNGE ---")
+
+    for index, attachment in enumerate(
+        attachments,
+        start=1
+    ):
+        print(
+            f"{index}: "
+            f"{attachment['filename']}"
+        )
+
+    print("\nA: Alle Anhänge")
+    print("N: Keine Anhänge")
+    print("Oder Nummern eingeben, z. B. 1,3,4")
+
+    selection = input(
+        "\nWelche Anhänge sollen gespeichert werden? "
+    ).strip().lower()
+
+    if selection == "a":
+        return attachments
+
+    if selection in {"n", ""}:
+        return []
+
+    selected_attachments = []
+
+    for value in selection.split(","):
+
+        value = value.strip()
+
+        if not value.isdigit():
+            print(
+                f"Ungültige Auswahl wird ignoriert: {value}"
+            )
+            continue
+
+        index = int(value) - 1
+
+        if 0 <= index < len(attachments):
+
+            attachment = attachments[index]
+
+            if attachment not in selected_attachments:
+                selected_attachments.append(
+                    attachment
+                )
+
+        else:
+            print(
+                f"Anhangnummer außerhalb des Bereichs: "
+                f"{value}"
+            )
+
+    return selected_attachments
+
+
+
+def select_project(projects):
+    """
+    Search for a project and let the user select one.
+
+    Returns:
+        dict: Selected project
+        None: User cancelled the selection
+    """
+
+    while True:
+
+        search_term = input(
+            "\nSearch project (Enter to cancel): "
+        ).strip()
+
+        if not search_term:
+            return None
+
+        results = search_projects(
+            projects,
+            search_term
+        )
+
+        if not results:
+            print("No projects found.")
+            continue
+
+        print(f"\n{len(results)} project(s) found:")
+
+        for index, project in enumerate(results, start=1):
+            print(
+                f"{index}: "
+                f"{project['project_number']} | "
+                f"{project['name']}"
+            )
+
+        # Exactly one result
+        if len(results) == 1:
+
+            selection = input(
+                "\nPress Enter to select this project "
+                "or 'B' to go back: "
+            ).strip().lower()
+
+            if selection == "b":
+                continue
+
+            return results[0]
+
+        # Multiple results
+        selection = input(
+            "\nSelect project number "
+            "(B = back, Q = cancel): "
+        ).strip().lower()
+
+        if selection == "q":
+            return None
+
+        if selection == "b":
+            continue
+
+        if not selection.isdigit():
+            print("Invalid selection.")
+            continue
+
+        index = int(selection) - 1
+
+        if not 0 <= index < len(results):
+            print("Invalid selection.")
+            continue
+
+        return results[index]
+
+'''
 # ==========================================
 # GUI
 # ==========================================
@@ -708,13 +716,19 @@ def save_attachments(
 class EmailToolGUI:
 
     def __init__(self, root, config, projects):
-
         self.root = root
         self.config = config
         self.projects = projects
 
-        self.selected_project = None
         self.current_results = projects
+        self.selected_project = None
+        self.email = None
+        self.attachment_vars = []
+        self.email_direction = tk.StringVar(
+            value="ein"
+        )
+        self.name1_var = tk.StringVar()
+        self.name2_var = tk.StringVar()
 
         self.root.title("Email Tool")
         self.root.geometry("800x600")
@@ -724,23 +738,229 @@ class EmailToolGUI:
 
     def create_widgets(self):
 
+        # -------------------------
+        # Title
+        # -------------------------
         title = ttk.Label(
             self.root,
             text="Email Tool",
             font=("Segoe UI", 18, "bold")
         )
+        title.pack(pady=(20, 10))
 
-        title.pack(
-            pady=(20, 10)
+        # -------------------------
+        # Email section
+        # -------------------------
+
+        email_frame = ttk.LabelFrame(
+            self.root,
+            text="E-Mail",
+            padding=10
         )
 
+        email_frame.pack(
+            fill="x",
+            padx=20,
+            pady=10
+        )
+
+
+        # Select MSG button
+        self.select_email_button = ttk.Button(
+            email_frame,
+            text="MSG auswählen",
+            command=self.select_email
+        )
+
+        self.select_email_button.pack(
+            anchor="w",
+            pady=(0, 10)
+        )
+
+
+        # Email information
+        self.email_subject_label = ttk.Label(
+            email_frame,
+            text="Betreff: -"
+        )
+
+        self.email_subject_label.pack(
+            anchor="w"
+        )
+
+
+        self.email_sender_label = ttk.Label(
+            email_frame,
+            text="Absender: -"
+        )
+
+        self.email_sender_label.pack(
+            anchor="w"
+        )
+
+
+        self.email_date_label = ttk.Label(
+            email_frame,
+            text="Datum: -"
+        )
+
+        self.email_date_label.pack(
+            anchor="w"
+        )
+
+
+        self.email_attachment_label = ttk.Label(
+            email_frame,
+            text="Anhänge: -"
+        )
+
+        self.email_attachment_label.pack(
+            anchor="w"
+        )
+
+        # -------------------------
+        # Email direction
+        # -------------------------
+
+        direction_frame = ttk.Frame(
+            email_frame
+        )
+
+        direction_frame.pack(
+            fill="x",
+            pady=(10, 0)
+        )
+
+        ttk.Label(
+            direction_frame,
+            text="Ablage:"
+        ).pack(
+            side="left"
+        )
+
+        ttk.Radiobutton(
+            direction_frame,
+            text="Eingang",
+            variable=self.email_direction,
+            value="ein"
+        ).pack(
+            side="left",
+            padx=(10, 5)
+        )
+
+        ttk.Radiobutton(
+            direction_frame,
+            text="Ausgang",
+            variable=self.email_direction,
+            value="aus"
+        ).pack(
+            side="left",
+            padx=5
+        )
+
+        # -------------------------
+        # Attachment section
+        # -------------------------
+
+        self.attachment_frame = ttk.LabelFrame(
+            self.root,
+            text="Anhänge",
+            padding=10
+        )
+
+        self.attachment_frame.pack(
+            fill="x",
+            padx=20,
+            pady=10
+        )
+
+        self.no_attachments_label = ttk.Label(
+            self.attachment_frame,
+            text="Noch keine E-Mail ausgewählt."
+        )
+
+        self.no_attachments_label.pack(
+            anchor="w"
+        )
+
+        # -------------------------
+        # Attachment destination
+        # -------------------------
+
+        attachment_destination_frame = ttk.LabelFrame(
+            self.root,
+            text="Ablage der Anhänge",
+            padding=10
+        )
+
+        attachment_destination_frame.pack(
+            fill="x",
+            padx=20,
+            pady=10
+        )
+
+
+        # name1
+        ttk.Label(
+            attachment_destination_frame,
+            text="Gemeinde / Organisation / Firma:"
+        ).pack(
+            anchor="w"
+        )
+
+
+        self.name1_combobox = ttk.Combobox(
+            attachment_destination_frame,
+            textvariable=self.name1_var
+        )
+
+        self.name1_combobox.pack(
+            fill="x",
+            pady=(5, 0)
+        )
+
+        # name2
+        ttk.Label(
+            attachment_destination_frame,
+            text="Art der Unterlagen:"
+        ).pack(
+            anchor="w",
+            pady=(10, 0)
+        )
+
+        self.name2_entry = ttk.Entry(
+            attachment_destination_frame,
+            textvariable=self.name2_var
+        )
+
+        self.name2_entry.pack(
+            fill="x",
+            pady=(5, 0)
+        )
+
+        # -------------------------
+        # Save button
+        # -------------------------
+
+        self.save_button = ttk.Button(
+            self.root,
+            text="Ablegen",
+            command=self.save_email_and_attachments
+        )
+
+        self.save_button.pack(
+            pady=20
+        )
+
+        # -------------------------
         # Project section
+        # -------------------------
+
         project_frame = ttk.LabelFrame(
             self.root,
             text="Projekt auswählen",
             padding=10
         )
-
         project_frame.pack(
             fill="both",
             expand=True,
@@ -748,12 +968,12 @@ class EmailToolGUI:
             pady=10
         )
 
+
+        # Search
         ttk.Label(
             project_frame,
             text="Projekt suchen:"
-        ).pack(
-            anchor="w"
-        )
+        ).pack(anchor="w")
 
         self.search_var = tk.StringVar()
 
@@ -761,7 +981,6 @@ class EmailToolGUI:
             project_frame,
             textvariable=self.search_var
         )
-
         self.search_entry.pack(
             fill="x",
             pady=(5, 10)
@@ -772,11 +991,12 @@ class EmailToolGUI:
             self.update_project_list
         )
 
+
+        # Project list
         self.project_list = tk.Listbox(
             project_frame,
             height=15
         )
-
         self.project_list.pack(
             fill="both",
             expand=True
@@ -787,19 +1007,355 @@ class EmailToolGUI:
             self.on_project_selected
         )
 
+
+        # Selected project
         self.selected_project_label = ttk.Label(
             project_frame,
             text="Kein Projekt ausgewählt."
         )
-
         self.selected_project_label.pack(
             anchor="w",
             pady=(10, 0)
         )
 
-        # Show all projects initially
+
+        # Display projects initially
         self.update_project_list()
 
+    def update_attachment_list(self):
+        """
+        Display all real email attachments as checkboxes.
+        """
+
+        # Remove old widgets from attachment frame
+        for widget in self.attachment_frame.winfo_children():
+            widget.destroy()
+
+        self.attachment_vars = []
+
+        if not self.email:
+            ttk.Label(
+                self.attachment_frame,
+                text="Noch keine E-Mail ausgewählt."
+            ).pack(anchor="w")
+
+            return
+
+        attachments = self.email["attachments"]
+
+        if not attachments:
+            ttk.Label(
+                self.attachment_frame,
+                text="Keine Anhänge vorhanden."
+            ).pack(anchor="w")
+
+            return
+
+        # Buttons
+        button_frame = ttk.Frame(
+            self.attachment_frame
+        )
+
+        button_frame.pack(
+            fill="x",
+            pady=(0, 5)
+        )
+
+        ttk.Button(
+            button_frame,
+            text="Alle auswählen",
+            command=self.select_all_attachments
+        ).pack(
+            side="left"
+        )
+
+        ttk.Button(
+            button_frame,
+            text="Keine auswählen",
+            command=self.deselect_all_attachments
+        ).pack(
+            side="left",
+            padx=(5, 0)
+        )
+
+        # Attachment checkboxes
+        for attachment in attachments:
+
+            selected = tk.BooleanVar(
+                value=True
+            )
+
+            self.attachment_vars.append({
+                "variable": selected,
+                "attachment": attachment
+            })
+
+            checkbox = ttk.Checkbutton(
+                self.attachment_frame,
+                text=attachment["filename"],
+                variable=selected
+            )
+
+            checkbox.pack(
+                anchor="w",
+                pady=2
+            )
+
+    def select_all_attachments(self):
+
+        for item in self.attachment_vars:
+            item["variable"].set(True)
+
+    def deselect_all_attachments(self):
+
+        for item in self.attachment_vars:
+            item["variable"].set(False)
+
+    def update_name1_folders(self):
+        """
+        Load existing name1 folders for the selected project.
+        """
+
+        self.name1_var.set("")
+
+        if not self.selected_project:
+            self.name1_combobox["values"] = []
+            return
+
+        attachment_root = (
+            Path(self.selected_project["path"])
+            / self.config["paths"]["attachment_folder"]
+        )
+
+        if not attachment_root.exists():
+            self.name1_combobox["values"] = []
+            return
+
+        try:
+
+            folders = sorted(
+                [
+                    folder.name
+                    for folder in attachment_root.iterdir()
+                    if folder.is_dir()
+                ],
+                key=str.lower
+            )
+
+        except PermissionError:
+
+            folders = []
+
+        self.name1_combobox["values"] = folders
+
+    def save_email_and_attachments(self):
+        """
+        Validate all required information and save
+        the email and selected attachments.
+        """
+
+        # -------------------------
+        # Validate email
+        # -------------------------
+
+        if self.email is None:
+            messagebox.showwarning(
+                "E-Mail fehlt",
+                "Bitte zuerst eine E-Mail auswählen."
+            )
+            return
+
+
+        # -------------------------
+        # Validate project
+        # -------------------------
+
+        if self.selected_project is None:
+            messagebox.showwarning(
+                "Projekt fehlt",
+                "Bitte zuerst ein Projekt auswählen."
+            )
+            return
+
+
+        # -------------------------
+        # Get selected attachments
+        # -------------------------
+
+        selected_attachments = (
+            self.get_selected_attachments()
+        )
+
+
+        # -------------------------
+        # Validate attachment data
+        # only if attachments are selected
+        # -------------------------
+
+        if selected_attachments:
+
+            name1 = self.name1_var.get().strip()
+            name2 = self.name2_var.get().strip()
+
+            if not name1:
+                messagebox.showwarning(
+                    "Angabe fehlt",
+                    "Bitte Gemeinde, Organisation oder Firma angeben."
+                )
+                return
+
+            if not name2:
+                messagebox.showwarning(
+                    "Angabe fehlt",
+                    "Bitte die Art der Unterlagen angeben."
+                )
+                return
+
+
+        # -------------------------
+        # Save everything
+        # -------------------------
+
+        try:
+
+            # Save email
+            saved_email = save_email(
+                self.email,
+                self.selected_project,
+                self.config,
+                self.email_direction.get()
+            )
+
+
+            # -------------------------
+            # Save attachments
+            # -------------------------
+
+            saved_files = []
+
+            if selected_attachments:
+
+                name1 = sanitize_filename(
+                    self.name1_var.get().strip()
+                )
+
+                name2 = sanitize_filename(
+                    self.name2_var.get().strip()
+                )
+
+
+                attachment_root = (
+                    Path(self.selected_project["path"])
+                    / self.config["paths"]["attachment_folder"]
+                )
+
+
+                name1_folder = (
+                    attachment_root
+                    / name1
+                )
+
+
+                name1_folder.mkdir(
+                    parents=True,
+                    exist_ok=True
+                )
+
+
+                attachment_destination = (
+                    create_attachment_destination(
+                        name1_folder=name1_folder,
+                        name2=name2,
+                        email_date=self.email["date"]
+                    )
+                )
+
+
+                saved_files = save_attachments(
+                    selected_attachments,
+                    attachment_destination
+                )
+
+
+            # -------------------------
+            # Success
+            # -------------------------
+
+            message = (
+                "Die E-Mail wurde erfolgreich abgelegt."
+            )
+
+            if saved_files:
+
+                message += (
+                    f"\n\n{len(saved_files)} "
+                    f"Anhang/Anhänge wurden gespeichert."
+                )
+
+            messagebox.showinfo(
+                "Ablage abgeschlossen",
+                message
+            )
+
+
+        except Exception as error:
+
+            messagebox.showerror(
+                "Fehler beim Speichern",
+                f"Die Ablage konnte nicht abgeschlossen werden:\n\n{error}"
+            )
+
+    def select_email(self):
+
+        msg_path = filedialog.askopenfilename(
+            title="MSG-Datei auswählen",
+            filetypes=[
+                ("Outlook MSG", "*.msg"),
+                ("Alle Dateien", "*.*")
+            ]
+        )
+
+        # User cancelled file selection
+        if not msg_path:
+            return
+
+        try:
+            self.email = read_email(
+                Path(msg_path)
+            )
+
+        except Exception as error:
+
+            messagebox.showerror(
+                "Fehler",
+                f"E-Mail konnte nicht gelesen werden:\n\n{error}"
+            )
+
+            self.email = None
+            return
+
+        # Update email information
+        self.email_subject_label.config(
+            text=f"Betreff: {self.email['subject']}"
+        )
+
+        self.email_sender_label.config(
+            text=f"Absender: {self.email['sender']}"
+        )
+
+        self.email_date_label.config(
+            text=f"Datum: {self.email['date']}"
+        )
+
+        attachment_count = len(
+            self.email["attachments"]
+        )
+
+        self.email_attachment_label.config(
+            text=f"Anhänge: {attachment_count}"
+        )
+
+        self.update_attachment_list()
 
     def update_project_list(self, event=None):
 
@@ -832,7 +1388,6 @@ class EmailToolGUI:
                 display_text
             )
 
-
     def on_project_selected(self, event=None):
 
         selection = self.project_list.curselection()
@@ -853,7 +1408,24 @@ class EmailToolGUI:
                 f"{self.selected_project['name']}"
             )
         )
+        # Load existing organisations / companies
+        self.update_name1_folders()
 
+    def get_selected_attachments(self):
+        """
+        Return only the attachments selected by the user.
+        """
+
+        selected = []
+
+        for item in self.attachment_vars:
+
+            if item["variable"].get():
+                selected.append(
+                    item["attachment"]
+                )
+
+        return selected
 
 # ==========================================
 # MAIN
@@ -867,7 +1439,8 @@ def main():
     config = load_config()
 
     root_folder = Path(config["paths"]["root_folder"])
-    msg_file = Path('C:/Users/jakobp/Desktop/Fw_ Vorbereitung Dienstbarkeitsverträge Arzler Alm-Leitung.msg')
+    msg_file = Path('C:/Users/jakobp/Desktop/test_mit_anhang.msg')
+
 
     print("Email Tool started")
     print(f"Root folder: {root_folder}")
@@ -879,7 +1452,7 @@ def main():
     if not msg_file.exists():
         print("ERROR: Test email does not exist.")
         return
-
+    
     
     email = read_email(msg_file)
 
@@ -915,6 +1488,8 @@ def main():
     else:
         print("No inline attachments found.")
 
+
+
     projects = scan_projects(
     root_folder,
     config
@@ -925,7 +1500,23 @@ def main():
         print("No projects available.")
         return
 
+    
+    # Start GUI
+    root = tk.Tk()
 
+    app = EmailToolGUI(
+        root,
+        config,
+        projects
+    )
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()  
+
+
+'''
     selected_project = select_project(projects)
 
     if selected_project is None:
@@ -1016,3 +1607,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''
