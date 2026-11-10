@@ -5,8 +5,9 @@ import re
 from datetime import datetime
 import shutil
 import tkinter as tk
-
 from tkinter import ttk, filedialog, messagebox
+import json
+from tkinterdnd2 import DND_FILES, TkinterDnD
 
 def read_email(msg_path):
     """
@@ -495,6 +496,58 @@ def save_attachments(
 
     return saved_files
 
+def load_user_settings():
+    """
+    Load user-specific settings.
+    """
+
+    settings_path = (
+        Path(__file__).parent
+        / "user_settings.json"
+    )
+
+    if not settings_path.exists():
+        return {
+            "recent_projects": []
+        }
+
+    try:
+        with open(
+            settings_path,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            return json.load(file)
+
+    except (json.JSONDecodeError, OSError):
+        return {
+            "recent_projects": []
+        }
+
+def save_user_settings(settings):
+    """
+    Save user-specific settings.
+    """
+
+    settings_path = (
+        Path(__file__).parent
+        / "user_settings.json"
+    )
+
+    with open(
+        settings_path,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            settings,
+            file,
+            indent=4,
+            ensure_ascii=False
+        )
+
 
 ''' alte Funktionen für terminalauswahl, werden jetzt durch GUI ersetzt
 
@@ -722,6 +775,23 @@ class EmailToolGUI:
 
         self.current_results = projects
         self.selected_project = None
+
+        self.user_settings = load_user_settings()
+        self.recent_projects = []
+
+        recent_paths = self.user_settings.get(
+            "recent_projects",
+            []
+        )
+
+        for recent_path in recent_paths:
+
+            for project in self.projects:
+
+                if str(project["path"]) == recent_path:
+                    self.recent_projects.append(project)
+                    break
+
         self.email = None
         self.attachment_vars = []
         self.email_direction = tk.StringVar(
@@ -729,43 +799,483 @@ class EmailToolGUI:
         )
         self.name1_var = tk.StringVar()
         self.name2_var = tk.StringVar()
+        self.year_var = tk.StringVar(value="Alle Jahre")
+        
 
         self.root.title("Email Tool")
-        self.root.geometry("800x600")
+        self.root.geometry("1000x700")
+        self.root.minsize(850, 600)
+
 
         self.create_widgets()
 
+    ''' alt eine spalte
+        def create_widgets(self):
 
+            # -------------------------
+            # Title
+            # -------------------------
+            title = ttk.Label(
+                self.root,
+                text="Email Tool",
+                font=("Segoe UI", 18, "bold")
+            )
+            title.pack(pady=(20, 10))
+
+
+
+
+            # -------------------------
+            # Project section
+            # -------------------------
+
+            project_frame = ttk.LabelFrame(
+                self.root,
+                text="Projekt auswählen",
+                padding=10
+            )
+            project_frame.pack(
+                fill="both",
+                expand=True,
+                padx=20,
+                pady=10
+            )
+            # -------------------------
+            # Recent projects
+            # -------------------------
+
+            ttk.Label(
+                project_frame,
+                text="Zuletzt verwendet:"
+            ).pack(
+                anchor="w",
+                pady=(0, 5)
+            )
+
+            self.recent_projects_frame = ttk.Frame(
+                project_frame
+            )
+
+            self.recent_projects_frame.pack(
+                fill="x",
+                pady=(0, 10)
+            )
+
+            self.update_recent_projects()
+            # -------------------------
+            # Year filter
+            # -------------------------
+
+            year_frame = ttk.Frame(
+                project_frame
+            )
+
+            year_frame.pack(
+                fill="x",
+                pady=(0, 10)
+            )
+
+            ttk.Label(
+                year_frame,
+                text="Projektjahr:"
+            ).pack(
+                side="left"
+            )
+
+            years = sorted(
+                {project["year"] for project in self.projects},
+                reverse=True
+            )
+
+            self.year_combobox = ttk.Combobox(
+                year_frame,
+                textvariable=self.year_var,
+                values=["Alle Jahre"] + years,
+                state="readonly",
+                width=15
+            )
+
+            self.year_combobox.pack(
+                side="left",
+                padx=(10, 0)
+            )
+
+            self.year_combobox.bind(
+                "<<ComboboxSelected>>",
+                self.update_project_list
+            )
+
+            # Search
+            ttk.Label(
+                project_frame,
+                text="Projekt suchen:"
+            ).pack(anchor="w")
+
+            self.search_var = tk.StringVar()
+
+            self.search_entry = ttk.Entry(
+                project_frame,
+                textvariable=self.search_var
+            )
+            self.search_entry.pack(
+                fill="x",
+                pady=(5, 10)
+            )
+
+            self.search_entry.bind(
+                "<KeyRelease>",
+                self.update_project_list
+            )
+
+
+            # Project list
+            project_list_frame = ttk.Frame(
+                project_frame
+            )
+
+            project_list_frame.pack(
+                fill="both",
+                expand=True
+            )
+            self.project_list = tk.Listbox(
+                project_list_frame,
+                height=7
+            )
+
+            self.project_list.pack(
+                side="left",
+                fill="both",
+                expand=True
+            )
+
+            project_scrollbar = ttk.Scrollbar(
+                project_list_frame,
+                orient="vertical",
+                command=self.project_list.yview
+            )
+
+            project_scrollbar.pack(
+                side="right",
+                fill="y"
+            )
+
+            self.project_list.config(
+                yscrollcommand=project_scrollbar.set
+            )
+
+            self.project_list.bind(
+                "<<ListboxSelect>>",
+                self.on_project_selected
+            )
+
+
+            # Selected project
+            self.selected_project_label = ttk.Label(
+                project_frame,
+                text="Kein Projekt ausgewählt."
+            )
+            self.selected_project_label.pack(
+                anchor="w",
+                pady=(10, 0)
+            )
+
+
+
+            # -------------------------
+            # Email section
+            # -------------------------
+
+            email_frame = ttk.LabelFrame(
+                self.root,
+                text="E-Mail",
+                padding=10
+            )
+
+            email_frame.pack(
+                fill="x",
+                padx=20,
+                pady=10
+            )
+
+
+            # Select MSG button
+            self.select_email_button = ttk.Button(
+                email_frame,
+                text="MSG auswählen",
+                command=self.select_email
+            )
+
+            self.select_email_button.pack(
+                anchor="w",
+                pady=(0, 10)
+            )
+
+
+            # Email information
+            self.email_subject_label = ttk.Label(
+                email_frame,
+                text="Betreff: -"
+            )
+
+            self.email_subject_label.pack(
+                anchor="w"
+            )
+
+
+            self.email_sender_label = ttk.Label(
+                email_frame,
+                text="Absender: -"
+            )
+
+            self.email_sender_label.pack(
+                anchor="w"
+            )
+
+
+            self.email_date_label = ttk.Label(
+                email_frame,
+                text="Datum: -"
+            )
+
+            self.email_date_label.pack(
+                anchor="w"
+            )
+
+
+            self.email_attachment_label = ttk.Label(
+                email_frame,
+                text="Anhänge: -"
+            )
+
+            self.email_attachment_label.pack(
+                anchor="w"
+            )
+
+            # -------------------------
+            # Email direction
+            # -------------------------
+
+            direction_frame = ttk.Frame(
+                email_frame
+            )
+
+            direction_frame.pack(
+                fill="x",
+                pady=(10, 0)
+            )
+
+            ttk.Label(
+                direction_frame,
+                text="Ablage:"
+            ).pack(
+                side="left"
+            )
+
+            ttk.Radiobutton(
+                direction_frame,
+                text="Eingang",
+                variable=self.email_direction,
+                value="ein"
+            ).pack(
+                side="left",
+                padx=(10, 5)
+            )
+
+            ttk.Radiobutton(
+                direction_frame,
+                text="Ausgang",
+                variable=self.email_direction,
+                value="aus"
+            ).pack(
+                side="left",
+                padx=5
+            )
+
+            # -------------------------
+            # Attachment section
+            # -------------------------
+
+            self.attachment_frame = ttk.LabelFrame(
+                self.root,
+                text="Anhänge",
+                padding=10
+            )
+
+            self.attachment_frame.pack(
+                fill="x",
+                padx=20,
+                pady=10
+            )
+
+            self.no_attachments_label = ttk.Label(
+                self.attachment_frame,
+                text="Noch keine E-Mail ausgewählt."
+            )
+
+            self.no_attachments_label.pack(
+                anchor="w"
+            )
+
+            # -------------------------
+            # Attachment destination
+            # -------------------------
+
+            self.attachment_destination_frame = ttk.LabelFrame(
+                self.root,
+                text="Ablage der Anhänge",
+                padding=10
+            )
+
+            self.attachment_destination_frame.pack(
+                fill="x",
+                padx=20,
+                pady=10
+            )
+
+
+            # name1
+            ttk.Label(
+                self.attachment_destination_frame,
+                text="Gemeinde / Organisation / Firma:"
+            ).pack(
+                anchor="w"
+            )
+
+
+            self.name1_combobox = ttk.Combobox(
+                self.attachment_destination_frame,
+                textvariable=self.name1_var
+            )
+
+            self.name1_combobox.pack(
+                fill="x",
+                pady=(5, 0)
+            )
+
+            # name2
+            ttk.Label(
+                self.attachment_destination_frame,
+                text="Art der Unterlagen:"
+            ).pack(
+                anchor="w",
+                pady=(10, 0)
+            )
+
+            self.name2_entry = ttk.Entry(
+                self.attachment_destination_frame,
+                textvariable=self.name2_var
+            )
+
+            self.name2_entry.pack(
+                fill="x",
+                pady=(5, 0)
+            )
+
+            # -------------------------
+            # Save button
+            # -------------------------
+
+            self.save_button = ttk.Button(
+                self.root,
+                text="Ablegen",
+                command=self.save_email_and_attachments
+            )
+
+            self.save_button.pack(
+                pady=20
+            )
+
+
+
+            # Display projects initially
+            self.update_project_list()
+    '''
+            
     def create_widgets(self):
 
-        # -------------------------
-        # Title
-        # -------------------------
-        title = ttk.Label(
+        # =====================================================
+        # MAIN CONTAINER
+        # =====================================================
+
+        main_frame = ttk.Frame(
             self.root,
+            padding=15
+        )
+
+        main_frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        # Two responsive columns
+        main_frame.columnconfigure(
+            0,
+            weight=1
+        )
+
+        main_frame.columnconfigure(
+            1,
+            weight=1
+        )
+
+        main_frame.rowconfigure(
+            1,
+            weight=1
+        )
+
+
+        # =====================================================
+        # TITLE
+        # =====================================================
+
+        title = ttk.Label(
+            main_frame,
             text="Email Tool",
             font=("Segoe UI", 18, "bold")
         )
-        title.pack(pady=(20, 10))
 
-        # -------------------------
-        # Email section
-        # -------------------------
+        title.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            pady=(0, 15)
+        )
+
+
+        # =====================================================
+        # LEFT COLUMN
+        # =====================================================
+
+        left_frame = ttk.Frame(
+            main_frame
+        )
+
+        left_frame.grid(
+            row=1,
+            column=0,
+            sticky="nsew",
+            padx=(0, 8)
+        )
+
+
+        # =====================================================
+        # EMAIL SECTION
+        # =====================================================
 
         email_frame = ttk.LabelFrame(
-            self.root,
+            left_frame,
             text="E-Mail",
             padding=10
         )
 
         email_frame.pack(
             fill="x",
-            padx=20,
-            pady=10
+            pady=(0, 10)
         )
 
 
         # Select MSG button
+
         self.select_email_button = ttk.Button(
             email_frame,
             text="MSG auswählen",
@@ -777,8 +1287,29 @@ class EmailToolGUI:
             pady=(0, 10)
         )
 
+        self.drop_label = ttk.Label(
+            email_frame,
+            text="MSG-Datei hier hineinziehen",
+            anchor="center",
+            padding=15
+        )
+
+        self.drop_label.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+        self.drop_label.drop_target_register(
+            DND_FILES
+        )
+
+        self.drop_label.dnd_bind(
+            "<<Drop>>",
+            self.on_email_drop
+        )
 
         # Email information
+
         self.email_subject_label = ttk.Label(
             email_frame,
             text="Betreff: -"
@@ -818,9 +1349,10 @@ class EmailToolGUI:
             anchor="w"
         )
 
-        # -------------------------
-        # Email direction
-        # -------------------------
+
+        # =====================================================
+        # EMAIL DIRECTION
+        # =====================================================
 
         direction_frame = ttk.Frame(
             email_frame
@@ -831,12 +1363,14 @@ class EmailToolGUI:
             pady=(10, 0)
         )
 
+
         ttk.Label(
             direction_frame,
             text="Ablage:"
         ).pack(
             side="left"
         )
+
 
         ttk.Radiobutton(
             direction_frame,
@@ -848,6 +1382,7 @@ class EmailToolGUI:
             padx=(10, 5)
         )
 
+
         ttk.Radiobutton(
             direction_frame,
             text="Ausgang",
@@ -858,21 +1393,22 @@ class EmailToolGUI:
             padx=5
         )
 
-        # -------------------------
-        # Attachment section
-        # -------------------------
+
+        # =====================================================
+        # ATTACHMENTS
+        # =====================================================
 
         self.attachment_frame = ttk.LabelFrame(
-            self.root,
+            left_frame,
             text="Anhänge",
             padding=10
         )
 
         self.attachment_frame.pack(
             fill="x",
-            padx=20,
-            pady=10
+            pady=(0, 10)
         )
+
 
         self.no_attachments_label = ttk.Label(
             self.attachment_frame,
@@ -883,26 +1419,27 @@ class EmailToolGUI:
             anchor="w"
         )
 
-        # -------------------------
-        # Attachment destination
-        # -------------------------
 
-        attachment_destination_frame = ttk.LabelFrame(
-            self.root,
+        # =====================================================
+        # ATTACHMENT DESTINATION
+        # =====================================================
+
+        self.attachment_destination_frame = ttk.LabelFrame(
+            left_frame,
             text="Ablage der Anhänge",
             padding=10
         )
 
-        attachment_destination_frame.pack(
+        self.attachment_destination_frame.pack(
             fill="x",
-            padx=20,
-            pady=10
+            pady=(0, 10)
         )
 
 
-        # name1
+        # Name 1
+
         ttk.Label(
-            attachment_destination_frame,
+            self.attachment_destination_frame,
             text="Gemeinde / Organisation / Firma:"
         ).pack(
             anchor="w"
@@ -910,7 +1447,7 @@ class EmailToolGUI:
 
 
         self.name1_combobox = ttk.Combobox(
-            attachment_destination_frame,
+            self.attachment_destination_frame,
             textvariable=self.name1_var
         )
 
@@ -919,17 +1456,20 @@ class EmailToolGUI:
             pady=(5, 0)
         )
 
-        # name2
+
+        # Name 2
+
         ttk.Label(
-            attachment_destination_frame,
+            self.attachment_destination_frame,
             text="Art der Unterlagen:"
         ).pack(
             anchor="w",
             pady=(10, 0)
         )
 
+
         self.name2_entry = ttk.Entry(
-            attachment_destination_frame,
+            self.attachment_destination_frame,
             textvariable=self.name2_var
         )
 
@@ -938,53 +1478,141 @@ class EmailToolGUI:
             pady=(5, 0)
         )
 
-        # -------------------------
-        # Save button
-        # -------------------------
 
-        self.save_button = ttk.Button(
-            self.root,
-            text="Ablegen",
-            command=self.save_email_and_attachments
+        # =====================================================
+        # RIGHT COLUMN
+        # =====================================================
+
+        right_frame = ttk.Frame(
+            main_frame
         )
 
-        self.save_button.pack(
-            pady=20
+        right_frame.grid(
+            row=1,
+            column=1,
+            sticky="nsew",
+            padx=(8, 0)
         )
 
-        # -------------------------
-        # Project section
-        # -------------------------
+
+        # =====================================================
+        # PROJECT SECTION
+        # =====================================================
 
         project_frame = ttk.LabelFrame(
-            self.root,
+            right_frame,
             text="Projekt auswählen",
             padding=10
         )
+
         project_frame.pack(
             fill="both",
-            expand=True,
-            padx=20,
-            pady=10
+            expand=True
         )
 
 
-        # Search
+        # =====================================================
+        # RECENT PROJECTS
+        # =====================================================
+
+        ttk.Label(
+            project_frame,
+            text="Zuletzt verwendet:"
+        ).pack(
+            anchor="w",
+            pady=(0, 5)
+        )
+
+
+        self.recent_projects_frame = ttk.Frame(
+            project_frame
+        )
+
+        self.recent_projects_frame.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+
+        self.update_recent_projects()
+
+
+        # =====================================================
+        # YEAR FILTER
+        # =====================================================
+
+        year_frame = ttk.Frame(
+            project_frame
+        )
+
+        year_frame.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+
+        ttk.Label(
+            year_frame,
+            text="Projektjahr:"
+        ).pack(
+            side="left"
+        )
+
+
+        years = sorted(
+            {
+                project["year"]
+                for project in self.projects
+            },
+            reverse=True
+        )
+
+
+        self.year_combobox = ttk.Combobox(
+            year_frame,
+            textvariable=self.year_var,
+            values=["Alle Jahre"] + years,
+            state="readonly",
+            width=15
+        )
+
+        self.year_combobox.pack(
+            side="left",
+            padx=(10, 0)
+        )
+
+
+        self.year_combobox.bind(
+            "<<ComboboxSelected>>",
+            self.update_project_list
+        )
+
+
+        # =====================================================
+        # PROJECT SEARCH
+        # =====================================================
+
         ttk.Label(
             project_frame,
             text="Projekt suchen:"
-        ).pack(anchor="w")
+        ).pack(
+            anchor="w"
+        )
+
 
         self.search_var = tk.StringVar()
+
 
         self.search_entry = ttk.Entry(
             project_frame,
             textvariable=self.search_var
         )
+
         self.search_entry.pack(
             fill="x",
             pady=(5, 10)
         )
+
 
         self.search_entry.bind(
             "<KeyRelease>",
@@ -992,15 +1620,48 @@ class EmailToolGUI:
         )
 
 
-        # Project list
-        self.project_list = tk.Listbox(
-            project_frame,
-            height=15
+        # =====================================================
+        # PROJECT LIST
+        # =====================================================
+
+        project_list_frame = ttk.Frame(
+            project_frame
         )
-        self.project_list.pack(
+
+        project_list_frame.pack(
             fill="both",
             expand=True
         )
+
+
+        self.project_list = tk.Listbox(
+            project_list_frame,
+            height=12
+        )
+
+        self.project_list.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+
+        project_scrollbar = ttk.Scrollbar(
+            project_list_frame,
+            orient="vertical",
+            command=self.project_list.yview
+        )
+
+        project_scrollbar.pack(
+            side="right",
+            fill="y"
+        )
+
+
+        self.project_list.config(
+            yscrollcommand=project_scrollbar.set
+        )
+
 
         self.project_list.bind(
             "<<ListboxSelect>>",
@@ -1008,19 +1669,59 @@ class EmailToolGUI:
         )
 
 
-        # Selected project
+        # =====================================================
+        # SELECTED PROJECT
+        # =====================================================
+
         self.selected_project_label = ttk.Label(
             project_frame,
             text="Kein Projekt ausgewählt."
         )
+
         self.selected_project_label.pack(
             anchor="w",
             pady=(10, 0)
         )
 
 
-        # Display projects initially
+        # =====================================================
+        # SAVE BUTTON
+        # =====================================================
+
+        button_frame = ttk.Frame(
+            main_frame
+        )
+
+        button_frame.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(15, 0)
+        )
+
+
+        self.save_button = ttk.Button(
+            button_frame,
+            text="Ablegen",
+            command=self.save_email_and_attachments
+        )
+
+        self.save_button.pack(
+            side="right",
+            ipadx=25,
+            ipady=5
+        )
+
+
+        # =====================================================
+        # INITIALIZE
+        # =====================================================
+
         self.update_project_list()
+
+        # Correct initial visibility of attachment destination
+        self.update_attachment_destination_visibility()
 
     def update_attachment_list(self):
         """
@@ -1093,23 +1794,29 @@ class EmailToolGUI:
             checkbox = ttk.Checkbutton(
                 self.attachment_frame,
                 text=attachment["filename"],
-                variable=selected
+                variable=selected,
+                command=self.update_attachment_destination_visibility
             )
 
             checkbox.pack(
                 anchor="w",
                 pady=2
-            )
+            ) 
+            self.update_attachment_destination_visibility()
 
     def select_all_attachments(self):
 
         for item in self.attachment_vars:
             item["variable"].set(True)
 
+        self.update_attachment_destination_visibility()
+
     def deselect_all_attachments(self):
 
         for item in self.attachment_vars:
             item["variable"].set(False)
+
+        self.update_attachment_destination_visibility()
 
     def update_name1_folders(self):
         """
@@ -1292,10 +1999,17 @@ class EmailToolGUI:
                     f"Anhang/Anhänge wurden gespeichert."
                 )
 
+            # Remember project
+            self.add_recent_project(
+                self.selected_project
+            )
+
             messagebox.showinfo(
                 "Ablage abgeschlossen",
                 message
             )
+
+            self.reset_form()
 
 
         except Exception as error:
@@ -1315,9 +2029,12 @@ class EmailToolGUI:
             ]
         )
 
-        # User cancelled file selection
         if not msg_path:
             return
+
+        self.load_email(Path(msg_path))
+
+    def load_email(self, msg_path):
 
         try:
             self.email = read_email(
@@ -1325,7 +2042,6 @@ class EmailToolGUI:
             )
 
         except Exception as error:
-
             messagebox.showerror(
                 "Fehler",
                 f"E-Mail konnte nicht gelesen werden:\n\n{error}"
@@ -1334,7 +2050,6 @@ class EmailToolGUI:
             self.email = None
             return
 
-        # Update email information
         self.email_subject_label.config(
             text=f"Betreff: {self.email['subject']}"
         )
@@ -1355,19 +2070,33 @@ class EmailToolGUI:
             text=f"Anhänge: {attachment_count}"
         )
 
+    
         self.update_attachment_list()
 
     def update_project_list(self, event=None):
 
-        search_term = self.search_var.get()
+        search_term = self.search_var.get().strip()
+        selected_year = self.year_var.get()
 
-        if search_term.strip():
+        # Start with all projects
+        results = self.projects
+
+        # Filter by year
+        if selected_year != "Alle Jahre":
+
+            results = [
+                project
+                for project in results
+                if project["year"] == selected_year
+            ]
+
+        # Filter by search term
+        if search_term:
+
             results = search_projects(
-                self.projects,
+                results,
                 search_term
             )
-        else:
-            results = self.projects
 
         self.current_results = results
 
@@ -1426,6 +2155,204 @@ class EmailToolGUI:
                 )
 
         return selected
+
+    def update_attachment_destination_visibility(self):
+        """
+        Show attachment destination settings only
+        when at least one attachment is selected.
+        """
+
+        has_selected_attachments = any(
+            item["variable"].get()
+            for item in self.attachment_vars
+        )
+
+        if has_selected_attachments:
+
+            if not self.attachment_destination_frame.winfo_ismapped():
+                self.attachment_destination_frame.pack(
+                    fill="x",
+                    pady=10
+                )
+
+        else:
+
+            if self.attachment_destination_frame.winfo_ismapped():
+                self.attachment_destination_frame.pack_forget()
+
+    def update_recent_projects(self):
+        """
+        Update the buttons for the three most recently used projects.
+        """
+
+        # Remove old buttons
+        for widget in self.recent_projects_frame.winfo_children():
+            widget.destroy()
+
+        if not self.recent_projects:
+
+            ttk.Label(
+                self.recent_projects_frame,
+                text="Noch keine Projekte verwendet."
+            ).pack(
+                anchor="w"
+            )
+
+            return
+
+        for project in self.recent_projects[:3]:
+
+            button = ttk.Button(
+                self.recent_projects_frame,
+                text=(
+                    f"{project['project_number']} | "
+                    f"{project['name']}"
+                ),
+                command=lambda p=project: self.select_recent_project(p)
+            )
+
+            button.pack(
+                fill="x",
+                pady=2
+            )
+
+    def select_recent_project(self, project):
+        """
+        Select a project from the recent projects list.
+        """
+
+        self.selected_project = project
+
+        self.selected_project_label.config(
+            text=(
+                f"Ausgewählt: "
+                f"{project['project_number']} | "
+                f"{project['name']}"
+            )
+        )
+
+        self.update_name1_folders()
+
+    def add_recent_project(self, project):
+        """
+        Add a project to the recent project list
+        and save the list permanently.
+        """
+
+        # Remove existing occurrence
+        self.recent_projects = [
+            existing_project
+            for existing_project in self.recent_projects
+            if existing_project["path"] != project["path"]
+        ]
+
+        # Put newest project first
+        self.recent_projects.insert(
+            0,
+            project
+        )
+
+        # Keep only the latest three
+        self.recent_projects = (
+            self.recent_projects[:3]
+        )
+
+        # Save project paths
+        self.user_settings["recent_projects"] = [
+            str(project["path"])
+            for project in self.recent_projects
+        ]
+
+        save_user_settings(
+            self.user_settings
+        )
+
+        self.update_recent_projects()
+
+    def reset_form(self):
+        """
+        Reset the GUI after a successful filing.
+        Recent projects remain unchanged.
+        """
+
+        # Email
+        self.email = None
+
+        self.email_subject_label.config(
+            text="Betreff: -"
+        )
+
+        self.email_sender_label.config(
+            text="Absender: -"
+        )
+
+        self.email_date_label.config(
+            text="Datum: -"
+        )
+
+        self.email_attachment_label.config(
+            text="Anhänge: -"
+        )
+
+        # Attachments
+        self.attachment_vars = []
+        self.update_attachment_list()
+
+        # Email direction
+        self.email_direction.set("Ein")
+
+        # Project
+        self.selected_project = None
+
+        self.selected_project_label.config(
+            text="Kein Projekt ausgewählt."
+        )
+
+        # Search
+        self.search_var.set("")
+
+        # Year filter
+        self.year_var.set("Alle Jahre")
+
+        # Refresh project list
+        self.update_project_list()
+
+        # Attachment destination
+        self.name1_var.set("")
+        self.name2_var.set("")
+
+        # Hide attachment destination
+        self.update_attachment_destination_visibility()
+
+        # Focus ready for next email
+        self.select_email_button.focus_set()
+
+    def on_email_drop(self, event):
+        """
+        Handle a dropped MSG file.
+        """
+
+        dropped_files = self.root.tk.splitlist(
+            event.data
+        )
+
+        if not dropped_files:
+            return
+
+        msg_path = Path(
+            dropped_files[0]
+        )
+
+        if msg_path.suffix.lower() != ".msg":
+
+            messagebox.showwarning(
+                "Ungültige Datei",
+                "Bitte eine Outlook-MSG-Datei verwenden."
+            )
+
+            return
+
+        self.load_email(msg_path)
 
 # ==========================================
 # MAIN
@@ -1502,7 +2429,7 @@ def main():
 
     
     # Start GUI
-    root = tk.Tk()
+    root = TkinterDnD.Tk()
 
     app = EmailToolGUI(
         root,
