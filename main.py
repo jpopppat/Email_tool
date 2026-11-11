@@ -2553,66 +2553,38 @@ class EmailToolGUI:
 # ==========================================
 
 
-
 def main():
     """Main entry point of the application."""
+
     pythoncom.OleInitialize()
+
     config = load_config()
 
-    root_folder = Path(config["paths"]["root_folder"])
-    msg_file = Path('C:/Users/jakobp/Desktop/test_mit_anhang.msg')
-
-
-    
+    root_folder = Path(
+        config["paths"]["root_folder"]
+    )
 
     if not root_folder.exists():
-        print("WARNING: Root folder does not exist.")
-
-    if not msg_file.exists():
-        print("ERROR: Test email does not exist.")
+        messagebox.showerror(
+            "Projektordner nicht gefunden",
+            f"Der Projektordner wurde nicht gefunden:\n\n"
+            f"{root_folder}"
+        )
         return
-    
-    
-    email = read_email(msg_file)
-
-    
-
-  
-    if email["attachments"]:
-
-        for attachment in email["attachments"]:
-            print(f"- {attachment['filename']}")
-            print(f"  CID: {attachment['content_id']}")
-
-    else:
-        print("No real attachments found.")
-
-
-    print("\n--- INLINE ATTACHMENTS ---")
-
-    if email["inline_attachments"]:
-
-        for attachment in email["inline_attachments"]:
-            print(f"- {attachment['filename']}")
-            print(f"  CID: {attachment['content_id']}")
-            print(f"  Reason: {attachment['inline_reason']}")
-
-    else:
-        print("No inline attachments found.")
-
-
 
     projects = scan_projects(
-    root_folder,
-    config
+        root_folder,
+        config
     )
-    
+
     if not projects:
-        print("No projects available.")
+        messagebox.showerror(
+            "Keine Projekte gefunden",
+            "Es wurden keine Projekte gefunden.\n\n"
+            "Bitte prüfen Sie die config.yaml."
+        )
         return
 
-    
-    # Start GUI
     root = TkinterDnD.Tk()
 
     app = EmailToolGUI(
@@ -2623,99 +2595,7 @@ def main():
 
     root.mainloop()
 
-if __name__ == "__main__":
-    main()  
-
-
-'''
-    selected_project = select_project(projects)
-
-    if selected_project is None:
-        print("\nProject selection cancelled.")
-        return
-
-
-    print(
-        f"\nSelected project: "
-        f"{selected_project['project_number']} | "
-        f"{selected_project['name']}"
-    )
-
-
-    # -------------------------
-    # Select attachments
-    # -------------------------
-
-    selected_attachments = select_attachments(
-        email["attachments"]
-    )
-
-    attachment_destination = None
-
-
-    # -------------------------
-    # Attachment destination
-    # -------------------------
-
-    if selected_attachments:
-
-        name1_folder = select_name1_folder(
-            selected_project["path"],
-            config
-        )
-
-        name2 = input(
-            "\nArt der Unterlagen: "
-        ).strip()
-
-        attachment_destination = (
-            create_attachment_destination(
-                name1_folder=name1_folder,
-                name2=name2,
-                email_date=None
-            )
-        )
-
-        print("\nZielordner für Anhänge:")
-        print(attachment_destination)
-
-
-    # -------------------------
-    # Save email
-    # -------------------------
-
-    email_direction = select_email_direction()
-
-    saved_email = save_email(
-        email,
-        selected_project,
-        config,
-        email_direction
-    )
-
-    print("\nE-Mail gespeichert:")
-    print(saved_email)
-
-
-    # -------------------------
-    # Save attachments
-    # -------------------------
-
-    if selected_attachments:
-
-        saved_files = save_attachments(
-            selected_attachments,
-            attachment_destination
-        )
-
-        print("\nGespeicherte Anhänge:")
-
-        for file in saved_files:
-            print(f"- {file}")
-
-
-    print("\nAblage abgeschlossen.")
 
 if __name__ == "__main__":
     main()
-'''
+
