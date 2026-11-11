@@ -5,6 +5,8 @@ Zum Staten die Verknüpfung EmailTool exe starten.
 Die Verküpung kann auf den Desktop gezogen werden um sie Schnell aufzufinden. 
 Den Programmordner nicht löschen und am besten unter den Progrmamen Ablegen.
 
+Der Sourcecode kann unter https://github.com/jpopppat/Email_tool heruntergeladen werden.
+
 Verwendung
 
 1. E-Mail laden
