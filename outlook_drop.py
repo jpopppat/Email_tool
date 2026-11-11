@@ -121,6 +121,16 @@ class OutlookDropTarget:
                 print(
                     f"{type(error).__name__}: {error}"
                 )
+
+                import tkinter.messagebox as messagebox
+
+                messagebox.showwarning(
+                    "Neues Outlook",
+                    "Die E-Mail konnte vom neuen Outlook nicht direkt "
+                    "übernommen werden.\n\n"
+                    "Bitte speichern Sie die Mail zunächst als Datei "
+                    "oder verwenden Sie das klassische Outlook."
+                )
         self.last_data_object = None
 
         return DROPEFFECT_COPY
@@ -228,62 +238,158 @@ def get_available_format_names(data_object):
 
     return available_formats
 
-def get_dropped_file_paths(data_object):
+def get_format_etc(data_object, wanted_format_name):
     """
-    Read real file paths from CF_HDROP.
-
-    Outlook or Chromium-based applications may provide
-    dragged messages as real temporary files.
+    Return the exact FORMATETC advertised by the data source.
     """
 
-    format_etc = (
-        15,  # CF_HDROP
-        None,
-        pythoncom.DVASPECT_CONTENT,
-        -1,
-        pythoncom.TYMED_HGLOBAL
+    format_enumerator = data_object.EnumFormatEtc(
+        pythoncom.DATADIR_GET
     )
 
-    result = data_object.GetData(
-        format_etc
+    while True:
+
+        formats = format_enumerator.Next(50)
+
+        if not formats:
+            break
+
+        for format_info in formats:
+
+            format_id = format_info[0]
+
+            format_name = get_clipboard_format_name(
+                format_id
+            )
+
+            if format_name == wanted_format_name:
+                return format_info
+
+    return None
+
+def can_get_format(data_object, format_etc):
+    """
+    Check whether the data object can actually provide
+    the specified FORMATETC.
+    """
+
+    try:
+        result = data_object.QueryGetData(
+            format_etc
+        )
+
+        print(
+            f"QueryGetData result for "
+            f"{format_etc}: {result}"
+        )
+
+        # Depending on pywin32, a successful request may
+        # return None or 0.
+        return result in (None, 0)
+
+    except pythoncom.com_error as error:
+
+        print(
+            f"QueryGetData failed for "
+            f"{format_etc}: {error}"
+        )
+
+        return False
+
+def get_dropped_file_paths(data_object):
+    """
+    Read file paths from CF_HDROP using the exact FORMATETC
+    advertised by the source application.
+    """
+
+    format_etc = get_format_etc(
+        data_object,
+        "CF_HDROP"
+    )
+
+    if format_etc is None:
+        raise ValueError(
+            "CF_HDROP wurde nicht angeboten."
+        )
+
+    print(
+        f"Advertised CF_HDROP FORMATETC: "
+        f"{format_etc}"
+    )
+
+    try:
+        medium = data_object.GetData(
+            format_etc
+        )
+
+    except pythoncom.com_error as error:
+        raise RuntimeError(
+            "CF_HDROP konnte nicht abgerufen werden.\n"
+            f"FORMATETC: {format_etc}\n"
+            f"COM-Fehler: {error}"
+        ) from error
+
+    print(
+        f"CF_HDROP medium type: "
+        f"{type(medium).__name__}"
+    )
+
+    data = (
+        medium.data
+        if hasattr(medium, "data")
+        else medium
     )
 
     print(
-        f"CF_HDROP result type: {type(result).__name__}"
+        f"CF_HDROP data type: "
+        f"{type(data).__name__}"
+    )
+
+    print(
+        f"CF_HDROP data representation: "
+        f"{repr(data)}"
     )
 
     paths = []
 
-    if isinstance(result, str):
+    candidates = [data]
 
-        paths.append(
-            Path(result)
-        )
+    if medium is not data:
+        candidates.append(medium)
 
-    elif isinstance(result, (tuple, list)):
+    for candidate in candidates:
 
-        for item in result:
+        if isinstance(candidate, str):
 
-            if isinstance(item, str):
+            paths.append(
+                Path(candidate)
+            )
 
-                paths.append(
-                    Path(item)
-                )
+        elif isinstance(candidate, (tuple, list)):
 
-            elif isinstance(item, (tuple, list)):
+            for item in candidate:
 
-                for nested_item in item:
+                if isinstance(item, str):
+                    paths.append(
+                        Path(item)
+                    )
 
-                    if isinstance(nested_item, str):
-                        paths.append(
-                            Path(nested_item)
-                        )
+                elif isinstance(item, (tuple, list)):
+
+                    for nested_item in item:
+
+                        if isinstance(nested_item, str):
+                            paths.append(
+                                Path(nested_item)
+                            )
 
     if not paths:
         raise TypeError(
-            "CF_HDROP wurde empfangen, aber es konnten "
-            "keine Dateipfade gelesen werden. "
-            f"Erhaltener Datentyp: {type(result).__name__}"
+            "CF_HDROP wurde empfangen, enthielt aber keine "
+            "direkt lesbaren Dateipfade.\n"
+            f"Medium-Typ: {type(medium).__name__}\n"
+            f"Daten-Typ: {type(data).__name__}\n"
+            f"FORMATETC: {format_etc}"
         )
 
     return paths
@@ -700,11 +806,59 @@ def extract_outlook_messages(data_object):
 
     if "CF_HDROP" in formats:
 
-        print("\nUsing CF_HDROP file drop.")
-
-        dropped_paths = get_dropped_file_paths(
-            data_object
+        hdrop_format = get_format_etc(
+            data_object,
+            "CF_HDROP"
         )
+
+        print(
+            f"\nCF_HDROP is advertised: "
+            f"{hdrop_format}"
+        )
+
+        if (
+            hdrop_format is not None
+            and can_get_format(
+                data_object,
+                hdrop_format
+            )
+        ):
+
+            print(
+                "Using CF_HDROP file drop."
+            )
+
+            dropped_paths = get_dropped_file_paths(
+                data_object
+            )
+
+            valid_files = []
+
+            for path in dropped_paths:
+
+                path = Path(path)
+
+                print(
+                    f"Dropped file: {path}"
+                )
+
+                if path.exists() and path.is_file():
+                    valid_files.append(path)
+
+            if valid_files:
+                return valid_files
+
+            print(
+                "CF_HDROP did not contain accessible files."
+            )
+
+        else:
+
+            print(
+                "CF_HDROP is advertised, but the source "
+                "does not provide it through IDataObject.GetData()."
+            )
+
 
         valid_files = []
 

@@ -11,6 +11,27 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import pythoncom
 from outlook_drop import OutlookDropManager
 import tempfile
+import sys
+from PIL import Image, ImageTk
+import webbrowser
+import win32com.client
+
+def get_app_directory():
+    """
+    Return the directory of the application.
+
+    Normal Python:
+        directory containing main.py
+
+    PyInstaller EXE:
+        directory containing EmailTool.exe
+    """
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+
+    return Path(__file__).parent
+
 
 def read_email(msg_path):
     """
@@ -275,7 +296,7 @@ def search_projects(projects, search_term):
 def load_config():
     """Load settings from config.yaml."""
 
-    config_path = Path(__file__).parent / "config.yaml"
+    config_path = get_app_directory() / "config.yaml"
 
     with open(config_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
@@ -505,7 +526,7 @@ def load_user_settings():
     """
 
     settings_path = (
-        Path(__file__).parent
+        get_app_directory()
         / "user_settings.json"
     )
 
@@ -534,7 +555,7 @@ def save_user_settings(settings):
     """
 
     settings_path = (
-        Path(__file__).parent
+        get_app_directory()
         / "user_settings.json"
     )
 
@@ -1233,7 +1254,36 @@ class EmailToolGUI:
             weight=1
         )
 
+        logo_path = get_app_directory() / "logo.png"
 
+        if logo_path.exists():
+            logo = Image.open(logo_path)
+
+            # Desired width
+            logo_width = 300
+
+            # Keep aspect ratio
+            ratio = logo_width / logo.width
+            logo_height = int(logo.height * ratio)
+
+            logo = logo.resize(
+                (logo_width, logo_height),
+                Image.Resampling.LANCZOS
+            )
+
+            self.logo_image = ImageTk.PhotoImage(logo)
+
+            logo_label = ttk.Label(
+                main_frame,
+                image=self.logo_image
+            )
+
+            logo_label.grid(
+                row=0,
+                column=0,
+                sticky="w",
+                pady=(0, 15)
+            )
         # =====================================================
         # TITLE
         # =====================================================
@@ -1246,11 +1296,10 @@ class EmailToolGUI:
 
         title.grid(
             row=0,
-            column=0,
-            columnspan=2,
+            column=1,
+            sticky="e",
             pady=(0, 15)
         )
-
 
         # =====================================================
         # LEFT COLUMN
@@ -1299,23 +1348,12 @@ class EmailToolGUI:
 
         self.drop_label = ttk.Label(
             email_frame,
-            text="MSG-Datei hier hineinziehen",
-            anchor="center",
-            padding=15
+            text="oder E-Mail hier hineinziehen"
         )
 
         self.drop_label.pack(
-            fill="x",
-            pady=(0, 10)
-        )
-
-        self.drop_label.drop_target_register(
-            DND_FILES
-        )
-
-        self.drop_label.dnd_bind(
-            "<<Drop>>",
-            self.on_email_drop
+            anchor="w",
+            pady=(0, 8)
         )
 
         # Email information
@@ -1695,7 +1733,7 @@ class EmailToolGUI:
 
 
         # =====================================================
-        # SAVE BUTTON
+        # BOTTOM / SAVE AREA
         # =====================================================
 
         button_frame = ttk.Frame(
@@ -1711,6 +1749,29 @@ class EmailToolGUI:
         )
 
 
+        # Bugreport link
+        bugreport_label = ttk.Label(
+            button_frame,
+            text="Bugreports / Feedback",
+            font=("Segoe UI", 8, "underline"),
+            foreground="#0563C1",
+            cursor="hand2"
+        )
+
+        bugreport_label.pack(
+            side="left"
+        )
+
+        bugreport_label.bind(
+            "<Button-1>",
+            lambda event: self.open_bugreport_email()
+        )
+
+
+        # =====================================================
+        # SAVE BUTTON
+        # =====================================================
+
         self.save_button = ttk.Button(
             button_frame,
             text="Ablegen",
@@ -1722,7 +1783,6 @@ class EmailToolGUI:
             ipadx=25,
             ipady=5
         )
-
 
         # =====================================================
         # INITIALIZE
@@ -1813,6 +1873,28 @@ class EmailToolGUI:
                 pady=2
             ) 
             self.update_attachment_destination_visibility()
+
+    def open_bugreport_email(self):
+        """
+        Open one new Outlook email for bug reports.
+        """
+
+        try:
+            outlook = win32com.client.Dispatch("Outlook.Application")
+
+            mail = outlook.CreateItem(0)
+
+            mail.To = "j.poppeller@patscheiderpartner.at"
+            mail.Subject = "Email Tool - Bugreport / Feedback"
+
+
+            mail.Display()
+
+        except Exception as error:
+            messagebox.showerror(
+                "Fehler",
+                f"Bugreport-E-Mail konnte nicht geöffnet werden:\n\n{error}"
+            )
 
     def select_all_attachments(self):
 
